@@ -127,3 +127,17 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Editors and IDEs
+.vs/
+.vscode/
+.idea/
+
+# VS C++
+/Dev/
+Debug/
+Release/
+test/
+*.sln
+*.vcxproj*
+*.exe
