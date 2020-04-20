@@ -141,3 +141,4 @@ test/
 *.sln
 *.vcxproj*
 *.exe
+test

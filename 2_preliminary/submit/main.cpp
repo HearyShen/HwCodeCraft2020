@@ -76,10 +76,7 @@ int fileToMatrix(string filename, Matrix &matrix)
 
 	while (inText >> from >> comma >> to >> comma >> amount)
 	{
-		if (amount > 0)
-		{
-			matrix[from].push_back(to);
-		}
+		matrix[from].push_back(to);
 		count++;
 	}
 	inText.close();
