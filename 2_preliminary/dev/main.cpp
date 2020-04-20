@@ -4,6 +4,7 @@
 #include <ctime>
 #include <vector>
 #include <stack>
+#include <set>
 #include <map>
 
 #define MIN_LEN 3
@@ -13,12 +14,13 @@ using namespace std;
 
 typedef vector<int> List;			  // [id1, id2, ..., idn]
 typedef stack<List> DfsStack;		  // Stack{path1, path2, ...}
-typedef map<int, List> Matrix;		  // {from: toes}
-typedef map<int, vector<List>> Slots; // {len: paths}
+typedef map<int, set<int>> Matrix;		  // {from: toes}
+typedef map<int, vector<string>> Slots; // {len: {paths}}}
 
 int fileToMatrix(string filename, Matrix &matrix);
 void displayMatrix(Matrix &matrix);
 bool listHas(List &list, int num);
+string listToString(List &list);
 int dfs(Matrix &matrix, int start, int minLen, int maxLen, Slots &results);
 void resultToFile(Slots &results, string filename, int minLen, int maxLen, int count);
 
@@ -75,7 +77,7 @@ int fileToMatrix(string filename, Matrix &matrix)
 
 	while (inText >> from >> comma >> to >> comma >> amount)
 	{
-		matrix[from].push_back(to);
+		matrix[from].insert(to);
 		count++;
 	}
 	inText.close();
@@ -88,9 +90,9 @@ void displayMatrix(Matrix &matrix)
 	for (Matrix::iterator mit = matrix.begin(); mit != matrix.end(); mit++)
 	{
 		cout << (*mit).first << ": ";
-		for (int i = 0; i < (*mit).second.size(); i++)
+		for (set<int>::iterator sit = (*mit).second.begin(); sit != (*mit).second.end(); sit++)
 		{
-			cout << (*mit).second[i] << " ";
+			cout << *sit << " ";
 		}
 		cout << endl;
 	}
@@ -108,10 +110,21 @@ bool listHas(List &list, int num)
 	return false;
 }
 
+string listToString(List &list)
+{
+	string s = to_string(list[0]);
+	for (int i=1; i< list.size(); i++)
+	{
+		s += "," + to_string(list[i]);
+	}
+	return s;
+}
+
 int dfs(Matrix &matrix, int start, int minLen, int maxLen, Slots &results)
 {
 	DfsStack dfsStack;
-	List curPath, nextNodes;
+	List curPath;
+	set<int> nextNodes;
 	int curNode, nextNode, curLen, cycleCount;
 
 	cycleCount = 0;
@@ -125,16 +138,16 @@ int dfs(Matrix &matrix, int start, int minLen, int maxLen, Slots &results)
 		curNode = curPath.back();
 
 		nextNodes = matrix[curNode];
-		for (int i = 0; i < nextNodes.size(); i++)
+		for (set<int>::reverse_iterator sit = nextNodes.rbegin(); sit != nextNodes.rend(); sit++)
 		{
-			nextNode = nextNodes[i];
+			nextNode = *sit;
 
 			if (nextNode == curPath[0])
 			{ 	// if target cycle detected, then record it
 				if (minLen <= curLen && curLen <= maxLen)
 				{
 					// valid length
-					results[curLen].push_back(curPath);
+					results[curLen].push_back((listToString(curPath)));
 					cycleCount++;
 				}
 			}
@@ -161,20 +174,9 @@ void resultToFile(Slots &results, string filename, int minLen, int maxLen, int c
 	outText << count << endl;
 	for (int i = minLen; i <= maxLen; i++)
 	{ // i-th slot
-		for (int j = 0; j < results[i].size(); j++)
-		{ // j-th list in i-th slot
-			// outText << listToString(results[i][j]) << endl;
-			pathLen = results[i][j].size();
-			for (int k = 0; k < pathLen; k++)
-			{ // k-th id in j-th list in i-th slot
-				outText << results[i][j][k];
-				if (k < pathLen - 1)
-				{
-					outText << ",";
-				}
-			}
-			outText << endl;
-			outCount++;
+		for (vector<string>::iterator sit = results[i].begin(); sit != results[i].end(); sit++)
+		{
+			outText << *sit << endl;
 		}
 	}
 	outText.close();
