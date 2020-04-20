@@ -128,8 +128,6 @@ int dfs(Matrix &matrix, int start, int minLen, int maxLen, Slots &results)
 		for (int i = 0; i < nextNodes.size(); i++)
 		{
 			nextNode = nextNodes[i];
-			List nextPath(curPath);
-			nextPath.push_back(nextNode);
 
 			if (nextNode == curPath[0])
 			{ 	// if target cycle detected, then record it
@@ -144,6 +142,8 @@ int dfs(Matrix &matrix, int start, int minLen, int maxLen, Slots &results)
 			{	// if not target cycle, then search deeper
 				if (curLen < maxLen && nextNode > curPath[0] && !listHas(curPath, nextNode))
 				{
+					List nextPath(curPath);
+					nextPath.push_back(nextNode);
 					dfsStack.push(nextPath);
 				}
 			}
