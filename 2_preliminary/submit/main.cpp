@@ -3,7 +3,8 @@
 #include <string>
 #include <ctime>
 #include <vector>
-#include <queue>
+#include <stack>
+#include <set>
 #include <map>
 
 #define MIN_LEN 3
@@ -12,17 +13,18 @@
 using namespace std;
 
 typedef vector<int> List;			  // [id1, id2, ..., idn]
-typedef queue<List> Queue;			  // Queue([id1, id2, ...], [id2, id3, ...])
-typedef map<int, List> Matrix;		  // {from: toes}
-typedef map<int, vector<List> > Slots; // {len: paths}
+typedef stack<List> DfsStack;		  // Stack{path1, path2, ...}
+typedef map<int, set<int>> Matrix;		  // {from: toes}
+typedef map<int, map<int, vector<string>>> Slots; // {len: {start_id: paths}}}
 
 int fileToMatrix(string filename, Matrix &matrix);
 void displayMatrix(Matrix &matrix);
 bool listHas(List &list, int num);
-int bfs(Matrix &matrix, int start, int minLen, int maxLen, Slots &results);
+string listToString(List &list);
+int dfs(Matrix &matrix, int start, int minLen, int maxLen, Slots &results);
 void resultToFile(Slots &results, string filename, int minLen, int maxLen, int count);
 
-int main(int argc, char* argv[])
+int main(int argc, char *argv[])
 {
 	string filename;
 	string outFilename;
@@ -44,7 +46,7 @@ int main(int argc, char* argv[])
 	for (Matrix::iterator mit = matrix.begin(); mit != matrix.end(); mit++)
 	{
 		start = (*mit).first;
-		cycleCount += bfs(matrix, start, MIN_LEN, MAX_LEN, results);
+		cycleCount += dfs(matrix, start, MIN_LEN, MAX_LEN, results);
 	}
 	toc = clock();
 	cout << "Detected " << cycleCount << " cycles in " << (double)(toc - tic) / CLOCKS_PER_SEC << "s" << endl;
@@ -76,7 +78,7 @@ int fileToMatrix(string filename, Matrix &matrix)
 
 	while (inText >> from >> comma >> to >> comma >> amount)
 	{
-		matrix[from].push_back(to);
+		matrix[from].insert(to);
 		count++;
 	}
 	inText.close();
@@ -89,9 +91,9 @@ void displayMatrix(Matrix &matrix)
 	for (Matrix::iterator mit = matrix.begin(); mit != matrix.end(); mit++)
 	{
 		cout << (*mit).first << ": ";
-		for (int i = 0; i < (*mit).second.size(); i++)
+		for (set<int>::iterator sit = (*mit).second.begin(); sit != (*mit).second.end(); sit++)
 		{
-			cout << (*mit).second[i] << " ";
+			cout << *sit << " ";
 		}
 		cout << endl;
 	}
@@ -109,44 +111,54 @@ bool listHas(List &list, int num)
 	return false;
 }
 
-int bfs(Matrix &matrix, int start, int minLen, int maxLen, Slots &results)
+string listToString(List &list)
 {
-	List startPath, curPath;
-	Queue bfsQueue;
-	int curNode, nextNode;
-	List nextNodes;
-	int len, bfsQueueLen, cycleCount;
-
-	len = 0;
-	cycleCount = 0;
-	startPath.push_back(start);
-	bfsQueue.push(startPath);
-	while (!bfsQueue.empty())
+	string s = to_string(list[0]);
+	for (int i=1; i< list.size(); i++)
 	{
-		curPath = bfsQueue.front();
-		bfsQueue.pop();
+		s += "," + to_string(list[i]);
+	}
+	return s;
+}
 
+int dfs(Matrix &matrix, int start, int minLen, int maxLen, Slots &results)
+{
+	DfsStack dfsStack;
+	List curPath, nextPath;
+	set<int> nextNodes;
+	int curNode, nextNode, curLen, cycleCount;
+
+	cycleCount = 0;
+	curPath.push_back(start);
+	dfsStack.push(curPath);
+	while (!dfsStack.empty())
+	{
+		curPath = dfsStack.top();
+		dfsStack.pop();
+		curLen = curPath.size();
 		curNode = curPath.back();
+
 		nextNodes = matrix[curNode];
-		for (int j = 0; j < nextNodes.size(); j++)
+		for (set<int>::reverse_iterator sit = nextNodes.rbegin(); sit != nextNodes.rend(); sit++)
 		{
-			nextNode = nextNodes[j];
-			if (listHas(curPath, nextNode))
-			{ // cycle detected
-				len = curPath.size();
-				if (minLen <= len && len <= maxLen && nextNodes[j] == start)
+			nextNode = *sit;
+
+			if (nextNode == curPath[0])
+			{ 	// if target cycle detected, then record it
+				if (minLen <= curLen && curLen <= maxLen)
 				{
-					results[len].push_back(curPath);
+					// valid length
+					results[curLen][curPath[0]].push_back((listToString(curPath)));
 					cycleCount++;
 				}
 			}
 			else
-			{ // no cycle
-				if (nextNode > start && curPath.size() < maxLen)
+			{	// if not target cycle, then search deeper
+				if (curLen < maxLen && nextNode > curPath[0] && !listHas(curPath, nextNode))
 				{
-					List nextPath(curPath);
+					nextPath.assign(curPath.begin(), curPath.end());
 					nextPath.push_back(nextNode);
-					bfsQueue.push(nextPath);
+					dfsStack.push(nextPath);
 				}
 			}
 		}
@@ -162,21 +174,13 @@ void resultToFile(Slots &results, string filename, int minLen, int maxLen, int c
 	outCount = 0;
 	outText << count << endl;
 	for (int i = minLen; i <= maxLen; i++)
-	{ // i-th slot
-		for (int j = 0; j < results[i].size(); j++)
-		{ // j-th list in i-th slot
-			// outText << listToString(results[i][j]) << endl;
-			pathLen = results[i][j].size();
-			for (int k = 0; k < pathLen; k++)
-			{ // k-th id in j-th list in i-th slot
-				outText << results[i][j][k];
-				if (k < pathLen - 1)
-				{
-					outText << ",";
-				}
+	{ // i-len path
+		for (map<int, vector<string>>::iterator mit = results[i].begin(); mit != results[i].end(); mit++)
+		{	// i-len path -> start from id j
+			for (int j=0; j<(*mit).second.size(); j++)
+			{	// i-len path -> paths start from id j -> each path
+				outText << (*mit).second[j] << endl;
 			}
-			outText << endl;
-			outCount++;
 		}
 	}
 	outText.close();
