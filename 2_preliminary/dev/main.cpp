@@ -8,11 +8,10 @@
 #include <map>
 #include <thread>
 #include <mutex>
-#include <chrono>
 
 #define MIN_LEN 3
 #define MAX_LEN 7
-#define TOTAL_THREADS 10
+#define TOTAL_THREADS 3
 
 using namespace std;
 
@@ -29,7 +28,7 @@ int dfs(Matrix &matrix, const int start, const int minLen, const int maxLen, Slo
 void dfsThread(const int threadID, Matrix &matrix, Matrix::iterator &mit, Slots &results, int &cycleCount);
 void resultToFile(Slots &results, const string filename, const int minLen, const int maxLen, const int count);
 
-mutex mit_lock, count_lock, results_lock, set_lock;
+mutex mit_lock, set_lock, result_lock;
 time_t g_tic = time(NULL);
 
 int main(int argc, char *argv[])
@@ -38,6 +37,7 @@ int main(int argc, char *argv[])
 	string outFilename = "result.txt";
 	Matrix matrix;
 	int retCode, start, cycleCount;
+	int cycleCounts[TOTAL_THREADS] = {0};
 	clock_t tic, toc;
 	time_t ttic, ttoc;
 	Slots results;
@@ -51,17 +51,20 @@ int main(int argc, char *argv[])
 	cout << "Readfile to matrix: " << retCode << " lines in " << (double)(toc - tic) / CLOCKS_PER_SEC << "s" << endl;
 
 	tic = clock();
-	cycleCount = 0;
 	Matrix::iterator mit = matrix.begin();
 	for (int i = 0; i < TOTAL_THREADS; i++)
 	{	
-		threads[i] = thread(dfsThread, i, ref(matrix), ref(mit), ref(results), ref(cycleCount));
+		threads[i] = thread(dfsThread, i, ref(matrix), ref(mit), ref(results), ref(cycleCounts[i]));
 		cout << "> dfsThread: " << i << " created" << endl;
 	}
 	for (int i = 0; i < TOTAL_THREADS; i++)
 	{
 		threads[i].join();
-		cout << "> dfsThread: " << i << " joined" << endl;
+	}
+	cycleCount = 0;
+	for (int i=0; i < TOTAL_THREADS; i++)
+	{
+		cycleCount += cycleCounts[i];
 	}
 	toc = clock();
 	cout << "Detected " << cycleCount << " cycles in " << (double)(toc - tic) / CLOCKS_PER_SEC << "s" << endl;
@@ -140,7 +143,7 @@ int dfs(Matrix &matrix, const int start, const int minLen, const int maxLen, Slo
 {
 	DfsStack dfsStack;
 	List curPath, nextPath;
-	set<int> nextNodes;
+	stack<int> nextNodes;
 	int curNode, nextNode, curLen, cycleCount;
 
 	cycleCount = 0;
@@ -155,18 +158,24 @@ int dfs(Matrix &matrix, const int start, const int minLen, const int maxLen, Slo
 
 		// nextNodes = matrix[curNode];
 		set_lock.lock();
-		for (set<int>::reverse_iterator sit = matrix[curNode].rbegin(); sit != matrix[curNode].rend(); sit++)
+		for (set<int>::iterator sit = matrix[curNode].begin(); sit != matrix[curNode].end(); sit++)
 		{
-			nextNode = *sit;
+			nextNodes.push(*sit);
+		}
+		set_lock.unlock();
+		while (!nextNodes.empty())
+		{
+			nextNode = nextNodes.top();
+			nextNodes.pop();
 
 			if (nextNode == curPath[0])
 			{ // if target cycle detected, then record it
 				if (minLen <= curLen && curLen <= maxLen)
 				{
 					// valid length
-					results_lock.lock();
+					result_lock.lock();
 					results[curLen][curPath[0]].push_back((listToString(curPath)));
-					results_lock.unlock();
+					result_lock.unlock();
 					cycleCount++;
 				}
 			}
@@ -180,7 +189,6 @@ int dfs(Matrix &matrix, const int start, const int minLen, const int maxLen, Slo
 				}
 			}
 		}
-		set_lock.unlock();
 	}
 	return cycleCount;
 }
@@ -189,9 +197,6 @@ void dfsThread(const int threadID, Matrix &matrix, Matrix::iterator &mit, Slots 
 {
 	int count;
 	int start;
-
-	cout << "> dfsThread: " << threadID << " running" << endl;
-	// this_thread::sleep_for(chrono::seconds(threadID*2));	// NOTE: this avoids segment fault.
 	
 	while (true)
 	{
@@ -208,15 +213,10 @@ void dfsThread(const int threadID, Matrix &matrix, Matrix::iterator &mit, Slots 
 			break;
 		}
 		
-		if (difftime(time(NULL), g_tic) > 5)
-			cout << "Scaning from " << start << " in thread " << threadID << endl;
 		count = dfs(matrix, start, MIN_LEN, MAX_LEN, results);
 
-		count_lock.lock();
 		cycleCount += count;
-		count_lock.unlock();
 	}
-	// cout << "> dfsThread: " << threadID << " exiting" << endl;
 }
 
 void resultToFile(Slots &results, const string filename, const int minLen, const int maxLen, const int count)
