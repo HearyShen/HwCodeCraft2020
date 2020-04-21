@@ -123,7 +123,7 @@ string listToString(List &list)
 int dfs(Matrix &matrix, int start, int minLen, int maxLen, Slots &results)
 {
 	DfsStack dfsStack;
-	List curPath;
+	List curPath, nextPath;
 	set<int> nextNodes;
 	int curNode, nextNode, curLen, cycleCount;
 
@@ -155,7 +155,7 @@ int dfs(Matrix &matrix, int start, int minLen, int maxLen, Slots &results)
 			{	// if not target cycle, then search deeper
 				if (curLen < maxLen && nextNode > curPath[0] && !listHas(curPath, nextNode))
 				{
-					List nextPath(curPath);
+					nextPath.assign(curPath.begin(), curPath.end());
 					nextPath.push_back(nextNode);
 					dfsStack.push(nextPath);
 				}
