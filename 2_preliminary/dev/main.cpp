@@ -12,7 +12,7 @@
 
 #define MIN_LEN 3
 #define MAX_LEN 7
-#define TOTAL_THREADS 4
+#define TOTAL_THREADS 10
 
 using namespace std;
 
@@ -29,7 +29,8 @@ int dfs(Matrix &matrix, const int start, const int minLen, const int maxLen, Slo
 void dfsThread(const int threadID, Matrix &matrix, Matrix::iterator &mit, Slots &results, int &cycleCount);
 void resultToFile(Slots &results, const string filename, const int minLen, const int maxLen, const int count);
 
-mutex mit_lock, count_lock, results_lock;
+mutex mit_lock, count_lock, results_lock, set_lock;
+time_t g_tic = time(NULL);
 
 int main(int argc, char *argv[])
 {
@@ -152,8 +153,9 @@ int dfs(Matrix &matrix, const int start, const int minLen, const int maxLen, Slo
 		curLen = curPath.size();
 		curNode = curPath.back();
 
-		nextNodes = matrix[curNode];
-		for (set<int>::reverse_iterator sit = nextNodes.rbegin(); sit != nextNodes.rend(); sit++)
+		// nextNodes = matrix[curNode];
+		set_lock.lock();
+		for (set<int>::reverse_iterator sit = matrix[curNode].rbegin(); sit != matrix[curNode].rend(); sit++)
 		{
 			nextNode = *sit;
 
@@ -178,6 +180,7 @@ int dfs(Matrix &matrix, const int start, const int minLen, const int maxLen, Slo
 				}
 			}
 		}
+		set_lock.unlock();
 	}
 	return cycleCount;
 }
@@ -187,8 +190,8 @@ void dfsThread(const int threadID, Matrix &matrix, Matrix::iterator &mit, Slots 
 	int count;
 	int start;
 
-	// cout << "> dfsThread: " << threadID << " running" << endl;
-	this_thread::sleep_for(chrono::seconds(threadID*2));	// NOTE: this avoids segment fault.
+	cout << "> dfsThread: " << threadID << " running" << endl;
+	// this_thread::sleep_for(chrono::seconds(threadID*2));	// NOTE: this avoids segment fault.
 	
 	while (true)
 	{
@@ -196,7 +199,7 @@ void dfsThread(const int threadID, Matrix &matrix, Matrix::iterator &mit, Slots 
 		if (mit != matrix.end())
 		{
 			start = (*mit).first;
-			mit++;
+			++mit;
 			mit_lock.unlock();
 		}
 		else
@@ -205,8 +208,8 @@ void dfsThread(const int threadID, Matrix &matrix, Matrix::iterator &mit, Slots 
 			break;
 		}
 		
-		
-		// cout << "Scaning from " << start << " in thread " << threadID << endl;
+		if (difftime(time(NULL), g_tic) > 5)
+			cout << "Scaning from " << start << " in thread " << threadID << endl;
 		count = dfs(matrix, start, MIN_LEN, MAX_LEN, results);
 
 		count_lock.lock();
