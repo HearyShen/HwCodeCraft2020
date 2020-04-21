@@ -15,7 +15,7 @@ using namespace std;
 typedef vector<int> List;			  // [id1, id2, ..., idn]
 typedef stack<List> DfsStack;		  // Stack{path1, path2, ...}
 typedef map<int, set<int>> Matrix;		  // {from: toes}
-typedef map<int, vector<string>> Slots; // {len: {paths}}}
+typedef map<int, map<int, vector<string>>> Slots; // {len: {start_id: paths}}}
 
 int fileToMatrix(string filename, Matrix &matrix);
 void displayMatrix(Matrix &matrix);
@@ -147,7 +147,7 @@ int dfs(Matrix &matrix, int start, int minLen, int maxLen, Slots &results)
 				if (minLen <= curLen && curLen <= maxLen)
 				{
 					// valid length
-					results[curLen].push_back((listToString(curPath)));
+					results[curLen][curPath[0]].push_back((listToString(curPath)));
 					cycleCount++;
 				}
 			}
@@ -173,10 +173,13 @@ void resultToFile(Slots &results, string filename, int minLen, int maxLen, int c
 	outCount = 0;
 	outText << count << endl;
 	for (int i = minLen; i <= maxLen; i++)
-	{ // i-th slot
-		for (vector<string>::iterator sit = results[i].begin(); sit != results[i].end(); sit++)
-		{
-			outText << *sit << endl;
+	{ // i-len path
+		for (map<int, vector<string>>::iterator mit = results[i].begin(); mit != results[i].end(); mit++)
+		{	// i-len path -> start from id j
+			for (int j=0; j<(*mit).second.size(); j++)
+			{	// i-len path -> paths start from id j -> each path
+				outText << (*mit).second[j] << endl;
+			}
 		}
 	}
 	outText.close();
