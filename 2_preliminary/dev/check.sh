@@ -1,5 +1,5 @@
-echo "Compiling..."
-g++ -O3 main.cpp -o test -lpthread
+echo "Compiling: $1" 
+g++ -O3 $1 -o test -lpthread
 
 echo -e "\ntest on 54:"
 ./test ../extra_data/54/test_data.txt
