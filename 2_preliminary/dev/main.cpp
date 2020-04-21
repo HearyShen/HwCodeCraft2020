@@ -8,10 +8,11 @@
 #include <map>
 #include <thread>
 #include <mutex>
+#include <chrono>
 
 #define MIN_LEN 3
 #define MAX_LEN 7
-#define TOTAL_THREADS 1
+#define TOTAL_THREADS 4
 
 using namespace std;
 
@@ -20,15 +21,15 @@ typedef stack<List> DfsStack;					  // Stack{path1, path2, ...}
 typedef map<int, set<int>> Matrix;				  // {from: toes}
 typedef map<int, map<int, vector<string>>> Slots; // {len: {start_id: paths}}}
 
-int fileToMatrix(string filename, Matrix &matrix);
+int fileToMatrix(const string filename, Matrix &matrix);
 void displayMatrix(Matrix &matrix);
-bool listHas(List &list, int num);
-string listToString(List &list);
-int dfs(Matrix &matrix, int start, int minLen, int maxLen, Slots &results);
-void dfsThread(int threadID, Matrix &matrix, Matrix::iterator &mit, Slots &results, int &cycleCount);
-void resultToFile(Slots &results, string filename, int minLen, int maxLen, int count);
+bool listHas(const List &list, const int num);
+string listToString(const List &list);
+int dfs(Matrix &matrix, const int start, const int minLen, const int maxLen, Slots &results);
+void dfsThread(const int threadID, Matrix &matrix, Matrix::iterator &mit, Slots &results, int &cycleCount);
+void resultToFile(Slots &results, const string filename, const int minLen, const int maxLen, const int count);
 
-mutex mlock;
+mutex lock1, lock2;
 
 int main(int argc, char *argv[])
 {
@@ -39,7 +40,6 @@ int main(int argc, char *argv[])
 	clock_t tic, toc, ttic, ttoc;
 	Slots results;
 	thread threads[TOTAL_THREADS];
-	mutex mlock;
 
 	ttic = clock();
 	tic = clock();
@@ -52,13 +52,14 @@ int main(int argc, char *argv[])
 	cycleCount = 0;
 	Matrix::iterator mit = matrix.begin();
 	for (int i = 0; i < TOTAL_THREADS; i++)
-	{
-		cout << "starting dfsThread: " << i << endl;
+	{	
 		threads[i] = thread(dfsThread, i, ref(matrix), ref(mit), ref(results), ref(cycleCount));
+		cout << "> dfsThread: " << i << " created" << endl;
 	}
 	for (int i = 0; i < TOTAL_THREADS; i++)
 	{
 		threads[i].join();
+		cout << "> dfsThread: " << i << " joined" << endl;
 	}
 	toc = clock();
 	cout << "Detected " << cycleCount << " cycles in " << (double)(toc - tic) / CLOCKS_PER_SEC << "s" << endl;
@@ -73,7 +74,7 @@ int main(int argc, char *argv[])
 	return 0;
 }
 
-int fileToMatrix(string filename, Matrix &matrix)
+int fileToMatrix(const string filename, Matrix &matrix)
 {
 	ifstream inText(filename.c_str());
 	if (!inText)
@@ -111,7 +112,7 @@ void displayMatrix(Matrix &matrix)
 	}
 }
 
-bool listHas(List &list, int num)
+bool listHas(const List &list, int num)
 {
 	for (int i = 0; i < list.size(); i++)
 	{
@@ -123,7 +124,7 @@ bool listHas(List &list, int num)
 	return false;
 }
 
-string listToString(List &list)
+string listToString(const List &list)
 {
 	string s = to_string(list[0]);
 	for (int i = 1; i < list.size(); i++)
@@ -133,7 +134,7 @@ string listToString(List &list)
 	return s;
 }
 
-int dfs(Matrix &matrix, int start, int minLen, int maxLen, Slots &results)
+int dfs(Matrix &matrix, const int start, const int minLen, const int maxLen, Slots &results)
 {
 	DfsStack dfsStack;
 	List curPath, nextPath;
@@ -160,9 +161,9 @@ int dfs(Matrix &matrix, int start, int minLen, int maxLen, Slots &results)
 				if (minLen <= curLen && curLen <= maxLen)
 				{
 					// valid length
-					mlock.lock();
+					// mlock.lock();
 					results[curLen][curPath[0]].push_back((listToString(curPath)));
-					mlock.unlock();
+					// mlock.unlock();
 					cycleCount++;
 				}
 			}
@@ -180,28 +181,33 @@ int dfs(Matrix &matrix, int start, int minLen, int maxLen, Slots &results)
 	return cycleCount;
 }
 
-void dfsThread(int threadID, Matrix &matrix, Matrix::iterator &mit, Slots &results, int &cycleCount)
+void dfsThread(const int threadID, Matrix &matrix, Matrix::iterator &mit, Slots &results, int &cycleCount)
 {
 	int count;
 	int start;
+
+	// cout << "> dfsThread: " << threadID << " running" << endl;
+	this_thread::sleep_for(chrono::seconds(threadID));	// NOTE: this avoids segment fault.
+	
 	while (mit != matrix.end())
 	{
-		mlock.lock();
+		lock1.lock();
 		start = (*mit).first;
 		mit++;
-		// cout << "Scaning from " << start << " in thread " << threadID << endl;
-		mlock.unlock();
+		lock1.unlock();
 		
+		// cout << "Scaning from " << start << " in thread " << threadID << endl;
 		count = dfs(matrix, start, MIN_LEN, MAX_LEN, results);
-		mlock.lock();
+		lock2.lock();
 		cycleCount += count;
-		mlock.unlock();
+		lock2.unlock();
 	}
+	// cout << "> dfsThread: " << threadID << " exiting" << endl;
 }
 
-void resultToFile(Slots &results, string filename, int minLen, int maxLen, int count)
+void resultToFile(Slots &results, const string filename, const int minLen, const int maxLen, const int count)
 {
-	int outCount, pathLen;
+	int outCount;
 	ofstream outText(filename.c_str());
 
 	outCount = 0;
