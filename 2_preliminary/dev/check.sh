@@ -20,3 +20,7 @@ diff result.txt ../extra_data/58284/result.txt
 echo -e "\ntest on 77409:"
 ./test ../extra_data/77409/test_data.txt
 diff result.txt ../extra_data/77409/result.txt
+
+echo -e "\ntest on 1004812:"
+./test ../extra_data/1004812/test_data.txt
+diff result.txt ../extra_data/1004812/result.txt
