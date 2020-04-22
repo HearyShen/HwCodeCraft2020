@@ -26,9 +26,10 @@ bool listHas(const List &list, const int num);
 string listToString(const List &list);
 int dfs(Matrix &matrix, const int start, const int minLen, const int maxLen, Slots &results);
 void dfsThread(const int threadID, Matrix &matrix, Matrix::iterator &mit, Slots &results, int &cycleCount);
+void mergeResults(Slots threadResults[TOTAL_THREADS], Slots &results, const int minLen, const int maxLen);
 void resultToFile(Slots &results, const string filename, const int minLen, const int maxLen, const int count);
 
-mutex mit_lock, set_lock, result_lock;
+mutex mit_lock, set_lock;
 time_t g_tic = time(NULL);
 
 int main(int argc, char *argv[])
@@ -40,7 +41,7 @@ int main(int argc, char *argv[])
 	int cycleCounts[TOTAL_THREADS] = {0};
 	clock_t tic, toc;
 	time_t ttic, ttoc;
-	Slots results;
+	Slots results, threadResults[TOTAL_THREADS];
 	thread threads[TOTAL_THREADS];
 
 	ttic = time(NULL);
@@ -54,7 +55,7 @@ int main(int argc, char *argv[])
 	Matrix::iterator mit = matrix.begin();
 	for (int i = 0; i < TOTAL_THREADS; i++)
 	{	
-		threads[i] = thread(dfsThread, i, ref(matrix), ref(mit), ref(results), ref(cycleCounts[i]));
+		threads[i] = thread(dfsThread, i, ref(matrix), ref(mit), ref(threadResults[i]), ref(cycleCounts[i]));
 		cout << "> dfsThread: " << i << " created" << endl;
 	}
 	for (int i = 0; i < TOTAL_THREADS; i++)
@@ -68,6 +69,11 @@ int main(int argc, char *argv[])
 	}
 	toc = clock();
 	cout << "Detected " << cycleCount << " cycles in " << (double)(toc - tic) / CLOCKS_PER_SEC << "s" << endl;
+
+	tic = clock();
+	mergeResults(threadResults, results, MIN_LEN, MAX_LEN);
+	toc = clock();
+	cout << "Threads' results merged in " << (double)(toc - tic) / CLOCKS_PER_SEC << "s" << endl;
 
 	tic = clock();
 	resultToFile(results, outFilename, MIN_LEN, MAX_LEN, cycleCount);
@@ -173,9 +179,7 @@ int dfs(Matrix &matrix, const int start, const int minLen, const int maxLen, Slo
 				if (minLen <= curLen && curLen <= maxLen)
 				{
 					// valid length
-					result_lock.lock();
 					results[curLen][curPath[0]].push_back((listToString(curPath)));
-					result_lock.unlock();
 					cycleCount++;
 				}
 			}
@@ -216,6 +220,23 @@ void dfsThread(const int threadID, Matrix &matrix, Matrix::iterator &mit, Slots 
 		count = dfs(matrix, start, MIN_LEN, MAX_LEN, results);
 
 		cycleCount += count;
+	}
+}
+
+void mergeResults(Slots threadResults[TOTAL_THREADS], Slots &results, const int minLen, const int maxLen)
+{
+	int userID;
+
+	for (int tID=0; tID < TOTAL_THREADS; tID++)
+	{	// for each thread's result slots
+		for (int pathLen = minLen; pathLen <= maxLen; pathLen++)
+		{ // for each pathLen
+			for (map<int, vector<string>>::iterator mit=threadResults[tID][pathLen].begin(); mit != threadResults[tID][pathLen].end(); mit++)
+			{	// for each user's cycle paths
+				userID = (*mit).first;
+				results[pathLen][userID].assign((*mit).second.begin(), (*mit).second.end());
+			}
+		}
 	}
 }
 
