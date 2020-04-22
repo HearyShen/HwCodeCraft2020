@@ -8,24 +8,29 @@
 #include <map>
 #include <thread>
 #include <mutex>
+#include <algorithm>
+#include <queue>
 
 #define MIN_LEN 3
 #define MAX_LEN 7
-#define TOTAL_THREADS 8
+#define TOTAL_THREADS 4
 
 using namespace std;
 
-typedef vector<int> List;						  // [id1, id2, ..., idn]
+typedef set<int> Set;
+typedef vector<int> List; // [id1, id2, ..., idn]
+typedef queue<int> Queue;
 typedef stack<List> DfsStack;					  // Stack{path1, path2, ...}
 typedef map<int, vector<int>> Matrix;			  // {from: toes}
 typedef map<int, map<int, vector<string>>> Slots; // {len: {start_id: paths}}}
 
-int fileToMatrix(const string filename, Matrix &matrix);
+int fileToMatrix(const string filename, Matrix &matrix, Matrix &rMatrix);
 // void displayMatrix(Matrix &matrix);
 bool listHas(const List &list, const int num);
 string listToString(const List &list);
-int dfs(Matrix &matrix, const int start, const int minLen, const int maxLen, Slots &results);
-void dfsThread(const int threadID, Matrix &matrix, Matrix::iterator &mit, Slots &results, int &cycleCount);
+int multiStepNeighbors(Matrix &matrix, Matrix &rMatrix, const int start, const int maxLen, Set &neighbors);
+int dfs(Matrix &matrix, const int start, const int minLen, const int maxLen, Set &neighbors, Slots &results);
+void dfsThread(const int threadID, Matrix &matrix, Matrix::iterator &mit, Matrix &rMatrix, Slots &results, int &cycleCount);
 void mergeResults(Slots threadResults[TOTAL_THREADS], Slots &results, const int minLen, const int maxLen);
 void resultToFile(Slots &results, const string filename, const int minLen, const int maxLen, const int count);
 
@@ -36,7 +41,7 @@ int main(int argc, char *argv[])
 {
 	string filename;
 	string outFilename = "result.txt";
-	Matrix matrix;
+	Matrix matrix, rMatrix;
 	int retCode, start, cycleCount;
 	int cycleCounts[TOTAL_THREADS] = {0};
 	clock_t tic, toc;
@@ -47,7 +52,7 @@ int main(int argc, char *argv[])
 	ttic = time(NULL);
 	tic = clock();
 	filename = argv[1];
-	retCode = fileToMatrix(filename, matrix);
+	retCode = fileToMatrix(filename, matrix, rMatrix);
 	toc = clock();
 	cout << "Readfile to matrix: " << retCode << " lines in " << (double)(toc - tic) / CLOCKS_PER_SEC << "s" << endl;
 
@@ -55,7 +60,7 @@ int main(int argc, char *argv[])
 	Matrix::iterator mit = matrix.begin();
 	for (int i = 0; i < TOTAL_THREADS; i++)
 	{
-		threads[i] = thread(dfsThread, i, ref(matrix), ref(mit), ref(threadResults[i]), ref(cycleCounts[i]));
+		threads[i] = thread(dfsThread, i, ref(matrix), ref(mit), ref(rMatrix), ref(threadResults[i]), ref(cycleCounts[i]));
 		cout << "> dfsThread: " << i << " created" << endl;
 	}
 	for (int i = 0; i < TOTAL_THREADS; i++)
@@ -85,9 +90,8 @@ int main(int argc, char *argv[])
 	return 0;
 }
 
-int fileToMatrix(const string filename, Matrix &matrix)
+int fileToMatrix(const string filename, Matrix &matrix, Matrix &rMatrix)
 {
-	map<int, set<int>> orderedMatrix; // use set for ordered insert
 	int userID;
 
 	ifstream inText(filename.c_str());
@@ -105,16 +109,20 @@ int fileToMatrix(const string filename, Matrix &matrix)
 
 	while (inText >> from >> comma >> to >> comma >> amount)
 	{
-		orderedMatrix[from].insert(to);
+		matrix[from].push_back(to);
+		rMatrix[to].push_back(from);
 		count++;
 	}
 	inText.close();
 
-	// write the ordered nextNodes in to matrix
-	for (map<int, set<int>>::iterator mit = orderedMatrix.begin(); mit != orderedMatrix.end(); mit++)
+	// sort it ordered
+	for (Matrix::iterator mit = matrix.begin(); mit != matrix.end(); mit++)
 	{
-		userID = (*mit).first;
-		matrix[userID].assign((*mit).second.begin(), (*mit).second.end());
+		sort((*mit).second.begin(), (*mit).second.end());
+	}
+	for (Matrix::iterator mit = rMatrix.begin(); mit != rMatrix.end(); mit++)
+	{
+		sort((*mit).second.begin(), (*mit).second.end());
 	}
 
 	return count;
@@ -155,12 +163,97 @@ string listToString(const List &list)
 	return s;
 }
 
-int dfs(Matrix &matrix, const int start, const int minLen, const int maxLen, Slots &results)
+int multiStepNeighbors(Matrix &matrix, Matrix &rMatrix, const int start, const int maxLen, Set &neighbors)
+{
+	Queue bfsQueue, bfsQueueR;
+	int curNode, len, queueSize;
+	Matrix::iterator matrix_iter;
+	List nextNodes;
+
+	len = 0;
+	bfsQueue.push(start);
+	while (!bfsQueue.empty())
+	{
+		len++;
+		if (len > maxLen)
+		{
+			break;
+		}
+
+		queueSize = bfsQueue.size();
+		for (int i = 0; i < queueSize; i++)
+		{
+			curNode = bfsQueue.front();
+			bfsQueue.pop();
+
+			// CAUTION: find next nodes, read-only to matrix
+			matrix_iter = matrix.find(curNode);
+			if (matrix_iter != matrix.end())
+			{
+				nextNodes = matrix_iter->second;
+			}
+			else
+			{
+				continue;
+			}
+
+			for (int j = 0; j < nextNodes.size(); j++)
+			{
+				neighbors.insert(nextNodes[j]);
+				if (len < maxLen)
+				{
+					bfsQueue.push(nextNodes[j]);
+				}
+			}
+		}
+	}
+
+	len = 0;
+	bfsQueueR.push(start);
+	while (!bfsQueueR.empty())
+	{
+		len++;
+		if (len > maxLen)
+		{
+			break;
+		}
+
+		queueSize = bfsQueueR.size();
+		for (int i = 0; i < queueSize; i++)
+		{
+			curNode = bfsQueueR.front();
+			bfsQueueR.pop();
+
+			// CAUTION: find next nodes, read-only to matrix
+			matrix_iter = rMatrix.find(curNode);
+			if (matrix_iter != rMatrix.end())
+			{
+				nextNodes = matrix_iter->second;
+			}
+			else
+			{
+				continue;
+			}
+
+			for (int j = 0; j < nextNodes.size(); j++)
+			{
+				neighbors.insert(nextNodes[j]);
+				if (len < maxLen)
+				{
+					bfsQueueR.push(nextNodes[j]);
+				}
+			}
+		}
+	}
+	return neighbors.size();
+}
+
+int dfs(Matrix &matrix, const int start, const int minLen, const int maxLen, Set &neighbors, Slots &results)
 {
 	DfsStack dfsStack;
 	List curPath, nextPath;
 	Matrix::iterator matrix_iter;
-	vector<int> nextNodes;
+	List nextNodes;
 	int curNode, nextNode, curLen, cycleCount;
 
 	cycleCount = 0;
@@ -199,7 +292,7 @@ int dfs(Matrix &matrix, const int start, const int minLen, const int maxLen, Slo
 			}
 			else
 			{ // if not target cycle, then search deeper
-				if (curLen < maxLen && nextNode > curPath[0] && !listHas(curPath, nextNode))
+				if (curLen < maxLen && nextNode > curPath[0] && !listHas(curPath, nextNode) && neighbors.find(nextNode) != neighbors.end())
 				{
 					nextPath.assign(curPath.begin(), curPath.end());
 					nextPath.push_back(nextNode);
@@ -211,10 +304,10 @@ int dfs(Matrix &matrix, const int start, const int minLen, const int maxLen, Slo
 	return cycleCount;
 }
 
-void dfsThread(const int threadID, Matrix &matrix, Matrix::iterator &mit, Slots &results, int &cycleCount)
+void dfsThread(const int threadID, Matrix &matrix, Matrix::iterator &mit, Matrix &rMatrix, Slots &results, int &cycleCount)
 {
-	int count;
-	int start;
+	int count, start, mSNCount;
+	Set mSNeighbors;
 
 	while (true)
 	{
@@ -231,7 +324,9 @@ void dfsThread(const int threadID, Matrix &matrix, Matrix::iterator &mit, Slots 
 			break;
 		}
 
-		count = dfs(matrix, start, MIN_LEN, MAX_LEN, results);
+		mSNCount = multiStepNeighbors(matrix, rMatrix, start, MAX_LEN / 2, mSNeighbors);
+		count = dfs(matrix, start, MIN_LEN, MAX_LEN, mSNeighbors, results);
+		mSNeighbors.clear();
 
 		cycleCount += count;
 	}
