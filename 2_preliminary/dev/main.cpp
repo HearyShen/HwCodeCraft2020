@@ -11,7 +11,7 @@
 
 #define MIN_LEN 3
 #define MAX_LEN 7
-#define TOTAL_THREADS 3
+#define TOTAL_THREADS 8
 
 using namespace std;
 
@@ -29,7 +29,7 @@ void dfsThread(const int threadID, Matrix &matrix, Matrix::iterator &mit, Slots 
 void mergeResults(Slots threadResults[TOTAL_THREADS], Slots &results, const int minLen, const int maxLen);
 void resultToFile(Slots &results, const string filename, const int minLen, const int maxLen, const int count);
 
-mutex mit_lock, matrix_lock;
+mutex mit_lock;
 time_t g_tic = time(NULL);
 
 int main(int argc, char *argv[])
@@ -159,6 +159,7 @@ int dfs(Matrix &matrix, const int start, const int minLen, const int maxLen, Slo
 {
 	DfsStack dfsStack;
 	List curPath, nextPath;
+	Matrix::iterator matrix_iter;
 	vector<int> nextNodes;
 	int curNode, nextNode, curLen, cycleCount;
 
@@ -172,9 +173,25 @@ int dfs(Matrix &matrix, const int start, const int minLen, const int maxLen, Slo
 		curLen = curPath.size();
 		curNode = curPath.back();
 
-		matrix_lock.lock();
-		nextNodes = matrix[curNode];
-		matrix_lock.unlock();
+		// try
+		// {
+		// 	nextNodes = matrix.at(curNode);
+		// }
+		// catch(const std::out_of_range& e)
+		// {
+		// 	continue;
+		// }
+		matrix_iter = matrix.find(curNode);
+		if (matrix_iter != matrix.end())
+		{
+			nextNodes = matrix[curNode];
+		}
+		else
+		{
+			continue;
+		}
+
+		
 		for (int i=nextNodes.size()-1; i>=0; i--)
 		{
 			nextNode = nextNodes[i];
