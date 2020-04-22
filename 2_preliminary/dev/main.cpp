@@ -17,7 +17,7 @@ using namespace std;
 
 typedef vector<int> List;						  // [id1, id2, ..., idn]
 typedef stack<List> DfsStack;					  // Stack{path1, path2, ...}
-typedef map<int, vector<int>> Matrix;				  // {from: toes}
+typedef map<int, vector<int>> Matrix;			  // {from: toes}
 typedef map<int, map<int, vector<string>>> Slots; // {len: {start_id: paths}}}
 
 int fileToMatrix(const string filename, Matrix &matrix);
@@ -54,7 +54,7 @@ int main(int argc, char *argv[])
 	tic = clock();
 	Matrix::iterator mit = matrix.begin();
 	for (int i = 0; i < TOTAL_THREADS; i++)
-	{	
+	{
 		threads[i] = thread(dfsThread, i, ref(matrix), ref(mit), ref(threadResults[i]), ref(cycleCounts[i]));
 		cout << "> dfsThread: " << i << " created" << endl;
 	}
@@ -63,7 +63,7 @@ int main(int argc, char *argv[])
 		threads[i].join();
 	}
 	cycleCount = 0;
-	for (int i=0; i < TOTAL_THREADS; i++)
+	for (int i = 0; i < TOTAL_THREADS; i++)
 	{
 		cycleCount += cycleCounts[i];
 	}
@@ -87,7 +87,7 @@ int main(int argc, char *argv[])
 
 int fileToMatrix(const string filename, Matrix &matrix)
 {
-	map<int, set<int>> orderedMatrix;	// use set for ordered insert
+	map<int, set<int>> orderedMatrix; // use set for ordered insert
 	int userID;
 
 	ifstream inText(filename.c_str());
@@ -111,7 +111,7 @@ int fileToMatrix(const string filename, Matrix &matrix)
 	inText.close();
 
 	// write the ordered nextNodes in to matrix
-	for (map<int, set<int>>::iterator mit=orderedMatrix.begin(); mit != orderedMatrix.end(); mit++)
+	for (map<int, set<int>>::iterator mit = orderedMatrix.begin(); mit != orderedMatrix.end(); mit++)
 	{
 		userID = (*mit).first;
 		matrix[userID].assign((*mit).second.begin(), (*mit).second.end());
@@ -173,26 +173,18 @@ int dfs(Matrix &matrix, const int start, const int minLen, const int maxLen, Slo
 		curLen = curPath.size();
 		curNode = curPath.back();
 
-		// try
-		// {
-		// 	nextNodes = matrix.at(curNode);
-		// }
-		// catch(const std::out_of_range& e)
-		// {
-		// 	continue;
-		// }
+		// CAUTION: find next nodes, read-only to matrix
 		matrix_iter = matrix.find(curNode);
 		if (matrix_iter != matrix.end())
 		{
-			nextNodes = matrix[curNode];
+			nextNodes = matrix_iter->second;
 		}
 		else
 		{
 			continue;
 		}
 
-		
-		for (int i=nextNodes.size()-1; i>=0; i--)
+		for (int i = nextNodes.size() - 1; i >= 0; i--)
 		{
 			nextNode = nextNodes[i];
 
@@ -223,7 +215,7 @@ void dfsThread(const int threadID, Matrix &matrix, Matrix::iterator &mit, Slots 
 {
 	int count;
 	int start;
-	
+
 	while (true)
 	{
 		mit_lock.lock();
@@ -238,7 +230,7 @@ void dfsThread(const int threadID, Matrix &matrix, Matrix::iterator &mit, Slots 
 			mit_lock.unlock();
 			break;
 		}
-		
+
 		count = dfs(matrix, start, MIN_LEN, MAX_LEN, results);
 
 		cycleCount += count;
@@ -249,12 +241,12 @@ void mergeResults(Slots threadResults[TOTAL_THREADS], Slots &results, const int 
 {
 	int userID;
 
-	for (int tID=0; tID < TOTAL_THREADS; tID++)
-	{	// for each thread's result slots
+	for (int tID = 0; tID < TOTAL_THREADS; tID++)
+	{ // for each thread's result slots
 		for (int pathLen = minLen; pathLen <= maxLen; pathLen++)
 		{ // for each pathLen
-			for (map<int, vector<string>>::iterator mit=threadResults[tID][pathLen].begin(); mit != threadResults[tID][pathLen].end(); mit++)
-			{	// for each user's cycle paths
+			for (map<int, vector<string>>::iterator mit = threadResults[tID][pathLen].begin(); mit != threadResults[tID][pathLen].end(); mit++)
+			{ // for each user's cycle paths
 				userID = (*mit).first;
 				results[pathLen][userID].assign((*mit).second.begin(), (*mit).second.end());
 			}
