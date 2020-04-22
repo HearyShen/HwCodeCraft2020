@@ -17,11 +17,11 @@ using namespace std;
 
 typedef vector<int> List;						  // [id1, id2, ..., idn]
 typedef stack<List> DfsStack;					  // Stack{path1, path2, ...}
-typedef map<int, set<int>> Matrix;				  // {from: toes}
+typedef map<int, vector<int>> Matrix;				  // {from: toes}
 typedef map<int, map<int, vector<string>>> Slots; // {len: {start_id: paths}}}
 
 int fileToMatrix(const string filename, Matrix &matrix);
-void displayMatrix(Matrix &matrix);
+// void displayMatrix(Matrix &matrix);
 bool listHas(const List &list, const int num);
 string listToString(const List &list);
 int dfs(Matrix &matrix, const int start, const int minLen, const int maxLen, Slots &results);
@@ -29,7 +29,7 @@ void dfsThread(const int threadID, Matrix &matrix, Matrix::iterator &mit, Slots 
 void mergeResults(Slots threadResults[TOTAL_THREADS], Slots &results, const int minLen, const int maxLen);
 void resultToFile(Slots &results, const string filename, const int minLen, const int maxLen, const int count);
 
-mutex mit_lock, set_lock;
+mutex mit_lock, matrix_lock;
 time_t g_tic = time(NULL);
 
 int main(int argc, char *argv[])
@@ -87,6 +87,9 @@ int main(int argc, char *argv[])
 
 int fileToMatrix(const string filename, Matrix &matrix)
 {
+	map<int, set<int>> orderedMatrix;	// use set for ordered insert
+	int userID;
+
 	ifstream inText(filename.c_str());
 	if (!inText)
 	{
@@ -102,26 +105,33 @@ int fileToMatrix(const string filename, Matrix &matrix)
 
 	while (inText >> from >> comma >> to >> comma >> amount)
 	{
-		matrix[from].insert(to);
+		orderedMatrix[from].insert(to);
 		count++;
 	}
 	inText.close();
 
+	// write the ordered nextNodes in to matrix
+	for (map<int, set<int>>::iterator mit=orderedMatrix.begin(); mit != orderedMatrix.end(); mit++)
+	{
+		userID = (*mit).first;
+		matrix[userID].assign((*mit).second.begin(), (*mit).second.end());
+	}
+
 	return count;
 }
 
-void displayMatrix(Matrix &matrix)
-{
-	for (Matrix::iterator mit = matrix.begin(); mit != matrix.end(); mit++)
-	{
-		cout << (*mit).first << ": ";
-		for (set<int>::iterator sit = (*mit).second.begin(); sit != (*mit).second.end(); sit++)
-		{
-			cout << *sit << " ";
-		}
-		cout << endl;
-	}
-}
+// void displayMatrix(Matrix &matrix)
+// {
+// 	for (Matrix::iterator mit = matrix.begin(); mit != matrix.end(); mit++)
+// 	{
+// 		cout << (*mit).first << ": ";
+// 		for (set<int>::iterator sit = (*mit).second.begin(); sit != (*mit).second.end(); sit++)
+// 		{
+// 			cout << *sit << " ";
+// 		}
+// 		cout << endl;
+// 	}
+// }
 
 bool listHas(const List &list, int num)
 {
@@ -149,7 +159,7 @@ int dfs(Matrix &matrix, const int start, const int minLen, const int maxLen, Slo
 {
 	DfsStack dfsStack;
 	List curPath, nextPath;
-	stack<int> nextNodes;
+	vector<int> nextNodes;
 	int curNode, nextNode, curLen, cycleCount;
 
 	cycleCount = 0;
@@ -162,17 +172,12 @@ int dfs(Matrix &matrix, const int start, const int minLen, const int maxLen, Slo
 		curLen = curPath.size();
 		curNode = curPath.back();
 
-		// nextNodes = matrix[curNode];
-		set_lock.lock();
-		for (set<int>::iterator sit = matrix[curNode].begin(); sit != matrix[curNode].end(); sit++)
+		matrix_lock.lock();
+		nextNodes = matrix[curNode];
+		matrix_lock.unlock();
+		for (int i=nextNodes.size()-1; i>=0; i--)
 		{
-			nextNodes.push(*sit);
-		}
-		set_lock.unlock();
-		while (!nextNodes.empty())
-		{
-			nextNode = nextNodes.top();
-			nextNodes.pop();
+			nextNode = nextNodes[i];
 
 			if (nextNode == curPath[0])
 			{ // if target cycle detected, then record it
