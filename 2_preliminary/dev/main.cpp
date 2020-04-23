@@ -18,6 +18,7 @@
 using namespace std;
 
 typedef set<int> Set;
+typedef map<int, int> Dict;
 typedef vector<int> List; // [id1, id2, ..., idn]
 typedef queue<int> Queue;
 typedef stack<List> DfsStack;					  // Stack{path1, path2, ...}
@@ -28,8 +29,8 @@ int fileToMatrix(const string filename, Matrix &matrix, Matrix &rMatrix);
 // void displayMatrix(Matrix &matrix);
 bool listHas(const List &list, const int num);
 string listToString(const List &list);
-int multiStepNeighbors(Matrix &matrix, Matrix &rMatrix, const int start, const int maxLen, Set &neighbors);
-int dfs(Matrix &matrix, const int start, const int minLen, const int maxLen, Set &neighbors, Slots &results);
+int multiStepNeighbors(Matrix &matrix, Matrix &rMatrix, const int start, const int maxLen, Dict &neighbors);
+int dfs(Matrix &matrix, const int start, const int minLen, const int maxLen, Dict &neighbors, Slots &results);
 void dfsThread(const int threadID, Matrix &matrix, Matrix::iterator &mit, Matrix &rMatrix, Slots &results, int &cycleCount);
 void mergeResults(Slots threadResults[TOTAL_THREADS], Slots &results, const int minLen, const int maxLen);
 void resultToFile(Slots &results, const string filename, const int minLen, const int maxLen, const int count);
@@ -163,7 +164,7 @@ string listToString(const List &list)
 	return s;
 }
 
-int multiStepNeighbors(Matrix &matrix, Matrix &rMatrix, const int start, const int maxLen, Set &neighbors)
+int multiStepNeighbors(Matrix &matrix, Matrix &rMatrix, const int start, const int maxLen, Dict &neighbors)
 {
 	Queue bfsQueue, bfsQueueR;
 	int curNode, len, queueSize;
@@ -199,7 +200,7 @@ int multiStepNeighbors(Matrix &matrix, Matrix &rMatrix, const int start, const i
 
 			for (int j = 0; j < nextNodes.size(); j++)
 			{
-				neighbors.insert(nextNodes[j]);
+				neighbors[nextNodes[j]] = start;
 				if (len < maxLen)
 				{
 					bfsQueue.push(nextNodes[j]);
@@ -237,7 +238,7 @@ int multiStepNeighbors(Matrix &matrix, Matrix &rMatrix, const int start, const i
 
 			for (int j = 0; j < nextNodes.size(); j++)
 			{
-				neighbors.insert(nextNodes[j]);
+				neighbors[nextNodes[j]] = start;
 				if (len < maxLen)
 				{
 					bfsQueueR.push(nextNodes[j]);
@@ -248,7 +249,20 @@ int multiStepNeighbors(Matrix &matrix, Matrix &rMatrix, const int start, const i
 	return neighbors.size();
 }
 
-int dfs(Matrix &matrix, const int start, const int minLen, const int maxLen, Set &neighbors, Slots &results)
+bool isNeighbor(Dict &neighbors, const int center, const int other)
+{
+	Dict::iterator dictIter;
+
+	dictIter = neighbors.find(other);
+	
+	if( dictIter != neighbors.end() && dictIter->second == center)
+	{
+		return true;
+	}
+	return false;
+}
+
+int dfs(Matrix &matrix, const int start, const int minLen, const int maxLen, Dict &neighbors, Slots &results)
 {
 	DfsStack dfsStack;
 	List curPath, nextPath;
@@ -292,7 +306,7 @@ int dfs(Matrix &matrix, const int start, const int minLen, const int maxLen, Set
 			}
 			else
 			{ // if not target cycle, then search deeper
-				if (curLen < maxLen && nextNode > curPath[0] && !listHas(curPath, nextNode) && neighbors.find(nextNode) != neighbors.end())
+				if (curLen < maxLen && nextNode > curPath[0] && !listHas(curPath, nextNode) && isNeighbor(neighbors, start, nextNode))
 				{
 					nextPath.assign(curPath.begin(), curPath.end());
 					nextPath.push_back(nextNode);
@@ -307,7 +321,7 @@ int dfs(Matrix &matrix, const int start, const int minLen, const int maxLen, Set
 void dfsThread(const int threadID, Matrix &matrix, Matrix::iterator &mit, Matrix &rMatrix, Slots &results, int &cycleCount)
 {
 	int count, start, mSNCount;
-	Set mSNeighbors;
+	Dict mSNeighbors;
 
 	while (true)
 	{
@@ -326,7 +340,6 @@ void dfsThread(const int threadID, Matrix &matrix, Matrix::iterator &mit, Matrix
 
 		mSNCount = multiStepNeighbors(matrix, rMatrix, start, MAX_LEN / 2, mSNeighbors);
 		count = dfs(matrix, start, MIN_LEN, MAX_LEN, mSNeighbors, results);
-		mSNeighbors.clear();
 
 		cycleCount += count;
 	}
