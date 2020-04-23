@@ -1,5 +1,6 @@
 #include <iostream>
 #include <fstream>
+#include <sstream>
 #include <string>
 #include <ctime>
 #include <vector>
@@ -13,6 +14,7 @@
 
 #define MIN_LEN 3
 #define MAX_LEN 7
+#define MAX_STEP MAX_LEN/2
 #define TOTAL_THREADS 4
 
 using namespace std;
@@ -28,7 +30,7 @@ int fileToMatrix(const string filename, Matrix &matrix, Matrix &rMatrix);
 // void displayMatrix(Matrix &matrix);
 bool listHas(const List &list, const int num);
 string listToString(const List &list);
-int multiStepNeighbors(Matrix &matrix, Matrix &rMatrix, const int start, const int maxLen, Set &neighbors);
+int multiStepNeighbors(Matrix &matrix, const int start, const int maxLen, Set &neighbors);
 int dfs(Matrix &matrix, const int start, const int minLen, const int maxLen, Set &neighbors, Slots &results);
 void dfsThread(const int threadID, Matrix &matrix, Matrix::iterator &mit, Matrix &rMatrix, Slots &results, int &cycleCount);
 void mergeResults(Slots threadResults[TOTAL_THREADS], Slots &results, const int minLen, const int maxLen);
@@ -157,17 +159,19 @@ bool listHas(const List &list, int num)
 
 string listToString(const List &list)
 {
-	string s = to_string(list[0]);
-	for (int i = 1; i < list.size(); i++)
+	stringstream ss;
+	for(int i = 0; i < list.size(); ++i)
 	{
-		s += "," + to_string(list[i]);
+		if(i != 0)
+			ss << ",";
+		ss << list[i];
 	}
-	return s;
+	return ss.str();
 }
 
-int multiStepNeighbors(Matrix &matrix, Matrix &rMatrix, const int start, const int maxLen, Set &neighbors)
+int multiStepNeighbors(Matrix &matrix, const int start, const int maxLen, Set &neighbors)
 {
-	Queue bfsQueue, bfsQueueR;
+	Queue bfsQueue;
 	int curNode, len, queueSize;
 	Matrix::iterator matrix_iter;
 	List nextNodes;
@@ -205,44 +209,6 @@ int multiStepNeighbors(Matrix &matrix, Matrix &rMatrix, const int start, const i
 				if (len < maxLen)
 				{
 					bfsQueue.push(nextNodes[j]);
-				}
-			}
-		}
-	}
-
-	len = 0;
-	bfsQueueR.push(start);
-	while (!bfsQueueR.empty())
-	{
-		len++;
-		if (len > maxLen)
-		{
-			break;
-		}
-
-		queueSize = bfsQueueR.size();
-		for (int i = 0; i < queueSize; i++)
-		{
-			curNode = bfsQueueR.front();
-			bfsQueueR.pop();
-
-			// CAUTION: find next nodes, read-only to matrix
-			matrix_iter = rMatrix.find(curNode);
-			if (matrix_iter != rMatrix.end())
-			{
-				nextNodes = matrix_iter->second;
-			}
-			else
-			{
-				continue;
-			}
-
-			for (int j = 0; j < nextNodes.size(); j++)
-			{
-				neighbors.insert(nextNodes[j]);
-				if (len < maxLen)
-				{
-					bfsQueueR.push(nextNodes[j]);
 				}
 			}
 		}
@@ -294,8 +260,12 @@ int dfs(Matrix &matrix, const int start, const int minLen, const int maxLen, Set
 			}
 			else
 			{ // if not target cycle, then search deeper
-				if (curLen < maxLen && nextNode > curPath[0] && !listHas(curPath, nextNode) && neighbors.find(nextNode) != neighbors.end())
+				if (curLen < maxLen && nextNode > curPath[0] && !listHas(curPath, nextNode))
 				{
+					if (curLen > MAX_STEP && neighbors.find(nextNode) == neighbors.end())
+					{	// if MAX_STEP steps away from start, nextNode should be in MAX_STEP neighbors of reverse direction
+						continue;
+					}
 					nextPath.assign(curPath.begin(), curPath.end());
 					nextPath.push_back(nextNode);
 					dfsStack.push(nextPath);
@@ -308,7 +278,7 @@ int dfs(Matrix &matrix, const int start, const int minLen, const int maxLen, Set
 
 void dfsThread(const int threadID, Matrix &matrix, Matrix::iterator &mit, Matrix &rMatrix, Slots &results, int &cycleCount)
 {
-	int count, start, mSNCount;
+	int count, start;
 	Set mSNeighbors;
 
 	while (true)
@@ -326,7 +296,8 @@ void dfsThread(const int threadID, Matrix &matrix, Matrix::iterator &mit, Matrix
 			break;
 		}
 
-		mSNCount = multiStepNeighbors(matrix, rMatrix, start, MAX_LEN / 2, mSNeighbors);
+		// multiStepNeighbors(matrix, start, maxStep, mSNeighbors);		// not necessary
+		multiStepNeighbors(rMatrix, start, MAX_STEP, mSNeighbors);
 		count = dfs(matrix, start, MIN_LEN, MAX_LEN, mSNeighbors, results);
 		mSNeighbors.clear();
 
