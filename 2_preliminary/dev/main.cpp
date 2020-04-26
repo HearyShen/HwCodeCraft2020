@@ -258,12 +258,8 @@ int dfs(Matrix &matrix, const int start, const int minLen, const int maxLen, Set
 			}
 			else
 			{ // if not target cycle, then search deeper
-				if (curLen < maxLen && nextNode > curPath[0] && !listHas(curPath, nextNode))
+				if (curLen < maxLen && nextNode > curPath[0] && (curLen <= MAX_STEP || neighbors.find(nextNode) != neighbors.end()) && !listHas(curPath, nextNode))
 				{
-					if (curLen > MAX_STEP && neighbors.find(nextNode) == neighbors.end())
-					{	// if MAX_STEP steps away from start, nextNode should be in MAX_STEP neighbors of reverse direction
-						continue;
-					}
 					nextPath.assign(curPath.begin(), curPath.end());
 					nextPath.push_back(nextNode);
 					dfsStack.push(nextPath);
