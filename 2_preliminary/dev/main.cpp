@@ -157,14 +157,12 @@ bool listHas(const List &list, int num)
 
 string listToString(const List &list)
 {
-	stringstream ss;
-	for(int i = 0; i < list.size(); ++i)
+	string s = to_string(list[0]);
+	for (int i = 1; i < list.size(); i++)
 	{
-		if(i != 0)
-			ss << ",";
-		ss << list[i];
+		s += "," + to_string(list[i]);
 	}
-	return ss.str();
+	return s;
 }
 
 int multiStepNeighbors(Matrix &matrix, const int start, const int maxLen, Set &neighbors)
